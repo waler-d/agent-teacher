@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "src/app/api/feishu/webhook/route.ts": {
+      "maxDuration": 300
+    }
+  }
+}
