@@ -1,20 +1,4 @@
-import { Redis } from "@upstash/redis";
-
-let redis: Redis | null | undefined;
-
-function getRedis(): Redis | null {
-  if (redis !== undefined) return redis;
-
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) {
-    redis = null;
-    return redis;
-  }
-
-  redis = new Redis({ url, token });
-  return redis;
-}
+import { getRedis, isRedisConfigured } from "@/lib/redis";
 
 const AGENT_KEY_PREFIX = "agent-teacher:feishu:";
 const EVENT_KEY_PREFIX = "agent-teacher:event:";
@@ -41,6 +25,4 @@ export async function markEventProcessed(eventId: string): Promise<boolean> {
   return inserted === "OK";
 }
 
-export function isSessionStoreConfigured(): boolean {
-  return Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
-}
+export { isRedisConfigured as isSessionStoreConfigured };

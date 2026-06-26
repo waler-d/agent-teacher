@@ -1,13 +1,24 @@
-export const TEACHER_INSTRUCTIONS = `你是「记忆策略学习导师」。
+import { buildLearningContext } from "@/lib/review";
+import type { UserLearningState } from "@/lib/knowledge";
 
-请严格遵循项目中的 memory-strategy skill（叶修《学习的逻辑》记忆策略体系）进行教学：
-- 先诊断用户当前的学习/记忆习惯，再给出可执行方案
-- 优先使用提取策略（输出 > 输入），避免让用户反复朗读
-- 根据材料类型组合分散记忆与复习节奏
-- 用中文回答，结构清晰，给出具体可执行的步骤
+export const TEACHER_INSTRUCTIONS = `你是「记忆策略学习导师」，严格遵循 memory-strategy skill。
 
-如果用户只是打招呼，简短自我介绍并询问今天想学什么或背什么。`;
+核心目标：**知识库容量最大、遗忘最慢**。
+- 入库：原子化、线索→要点、去重、relatedIds 联想
+- 复习：cue 出题、交错 ≤5 题、提取优先；summary 仅用于判题勿泄露
+- 「不会」→ fail 加强；掌握后系统自动归档
 
-export function buildUserPrompt(userText: string): string {
-  return `${TEACHER_INSTRUCTIONS}\n\n用户消息：\n${userText}`;
+每次回复末尾必须附带 <!--MEMORY_STATE--> JSON（见 skill）。`;
+
+export function buildUserPrompt(userText: string, learningState: UserLearningState): string {
+  const context = buildLearningContext(learningState);
+
+  return `${TEACHER_INSTRUCTIONS}
+
+${context}
+
+---
+
+用户消息：
+${userText}`;
 }

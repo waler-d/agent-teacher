@@ -1,5 +1,7 @@
 import { Agent, AgentBusyError, CursorAgentError } from "@cursor/sdk";
 import { buildUserPrompt } from "@/lib/prompts";
+import { loadLearningState } from "@/lib/review";
+import { processAgentReply } from "@/lib/memory-state";
 import { getAgentIdForUser, saveAgentIdForUser } from "@/lib/session";
 
 function requireEnv(name: string): string {
@@ -86,9 +88,10 @@ async function withTeacherAgent<T>(
 
 export async function askTeacher(openId: string, userText: string): Promise<string> {
   const apiKey = requireEnv("CURSOR_API_KEY");
-  const prompt = buildUserPrompt(userText);
+  const learningState = await loadLearningState(openId);
+  const prompt = buildUserPrompt(userText, learningState);
 
-  return withTeacherAgent(openId, apiKey, async (agent) => {
+  const rawReply = await withTeacherAgent(openId, apiKey, async (agent) => {
     const maxAttempts = 3;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -106,6 +109,8 @@ export async function askTeacher(openId: string, userText: string): Promise<stri
 
     throw new Error("Cloud Agent 忙碌，请稍后再试。");
   });
+
+  return processAgentReply(openId, rawReply);
 }
 
 function sleep(ms: number): Promise<void> {
