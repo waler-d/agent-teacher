@@ -2,25 +2,20 @@ export type KnowledgeSource = "ppt" | "qa";
 export type MaterialType = "scatter" | "structured" | "concept";
 export type ReviewResult = "pass" | "partial" | "fail";
 export type Strength = "normal" | "weak";
-export type PointStatus = "active" | "mastered";
 
 /** 活跃知识点（参与复习调度） */
 export type KnowledgePoint = {
   id: string;
   title: string;
-  /** 提取用「线索→要点」，尽量 ≤120 字，只存回忆必需信息 */
   summary: string;
-  /** 可选短线索，出题时不暴露 summary 全文 */
   cue?: string;
   source: KnowledgeSource;
   sourceDetail?: string;
   materialType: MaterialType;
-  /** 关联知识点 id，用于交错复习、联想编码（有意义内容忘得更慢） */
   relatedIds?: string[];
   learnedAt: string;
   stageIndex: number;
   strength: Strength;
-  /** SM-2 式可塑因子：越高间隔越长，范围约 1.3～2.8 */
   ease: number;
   consecutivePasses: number;
   nextReviewAt: string;
@@ -28,7 +23,6 @@ export type KnowledgePoint = {
   reviewHistory: Array<{ at: string; result: ReviewResult }>;
 };
 
-/** 已掌握归档：极简字段，释放活跃队列容量 */
 export type ArchivedPoint = {
   id: string;
   title: string;
@@ -43,7 +37,6 @@ export type QuizSession = {
   pointIds: string[];
   currentIndex: number;
   startedAt: string;
-  /** 交错复习：混合不同 materialType */
   interleaved: boolean;
 };
 
@@ -83,12 +76,14 @@ export type MemoryStateBlock = {
   quiz?: QuizActionInput;
 };
 
-/** 叶修方向性间隔 × 可塑因子 */
-export const REVIEW_STAGE_DAYS = [0, 1, 3, 7, 14, 30, 60, 120] as const;
+/** 高强度复习：以小时为单位，最长间隔 48h（2 天） */
+export const REVIEW_STAGE_HOURS = [1, 2, 4, 6, 12, 24, 36, 48] as const;
+export const MAX_INTERVAL_HOURS = 48;
 export const MIN_POINTS_FOR_QUIZ = 3;
 export const MAX_QUIZ_BATCH = 5;
-export const WEAK_RETRY_DAYS = 1;
-export const PARTIAL_RETRY_DAYS = 2;
+export const FAIL_RETRY_HOURS = 1;
+export const PARTIAL_RETRY_HOURS = 2;
+export const NEW_POINT_FIRST_REVIEW_HOURS = 1;
 export const MAX_SUMMARY_LEN = 120;
 export const MAX_TITLE_LEN = 24;
 export const MAX_HISTORY_LEN = 4;
@@ -105,9 +100,9 @@ export function createPointId(): string {
   return `kp_${stamp}_${rand}`;
 }
 
-export function addDays(iso: string | Date, days: number): string {
+export function addHours(iso: string | Date, hours: number): string {
   const date = new Date(iso);
-  date.setUTCDate(date.getUTCDate() + Math.max(0, Math.round(days)));
+  date.setTime(date.getTime() + Math.max(0, hours) * 60 * 60 * 1000);
   return date.toISOString();
 }
 
@@ -130,10 +125,18 @@ export function isDue(point: KnowledgePoint, now = new Date()): boolean {
   return new Date(point.nextReviewAt).getTime() <= now.getTime();
 }
 
-export function intervalDaysForStage(stageIndex: number, ease: number): number {
-  const base = REVIEW_STAGE_DAYS[Math.min(stageIndex, REVIEW_STAGE_DAYS.length - 1)] ?? 120;
+export function formatReviewTime(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export function intervalHoursForStage(stageIndex: number, ease: number): number {
+  const base =
+    REVIEW_STAGE_HOURS[Math.min(stageIndex, REVIEW_STAGE_HOURS.length - 1)] ??
+    MAX_INTERVAL_HOURS;
   const scaled = base * (ease / DEFAULT_EASE);
-  return Math.min(120, Math.max(stageIndex === 0 ? 0 : 1, Math.round(scaled)));
+  return Math.min(MAX_INTERVAL_HOURS, Math.max(1, Math.round(scaled)));
 }
 
 export type ScheduleOutcome =
@@ -163,7 +166,7 @@ export function scheduleAfterResult(
         strength,
         stageIndex,
         lastReviewAt: at,
-        nextReviewAt: addDays(now, WEAK_RETRY_DAYS),
+        nextReviewAt: addHours(now, FAIL_RETRY_HOURS),
         reviewHistory: history,
       },
     };
@@ -179,19 +182,19 @@ export function scheduleAfterResult(
         ease,
         consecutivePasses,
         lastReviewAt: at,
-        nextReviewAt: addDays(now, PARTIAL_RETRY_DAYS),
+        nextReviewAt: addHours(now, PARTIAL_RETRY_HOURS),
         reviewHistory: history,
       },
     };
   }
 
-  ease = Math.min(MAX_EASE, ease + 0.08);
+  ease = Math.min(MAX_EASE, ease + 0.05);
   consecutivePasses += 1;
   if (strength === "weak" && consecutivePasses >= 2) strength = "normal";
 
-  const nextStage = Math.min(stageIndex + 1, REVIEW_STAGE_DAYS.length - 1);
-  let days = intervalDaysForStage(nextStage, ease);
-  if (strength === "weak" && nextStage <= 3) days = Math.min(days, 2);
+  const nextStage = Math.min(stageIndex + 1, REVIEW_STAGE_HOURS.length - 1);
+  let hours = intervalHoursForStage(nextStage, ease);
+  if (strength === "weak") hours = Math.min(hours, PARTIAL_RETRY_HOURS);
 
   const updated: KnowledgePoint = {
     ...point,
@@ -200,7 +203,7 @@ export function scheduleAfterResult(
     strength,
     stageIndex: nextStage,
     lastReviewAt: at,
-    nextReviewAt: addDays(now, days),
+    nextReviewAt: addHours(now, hours),
     reviewHistory: history,
   };
 
@@ -255,7 +258,7 @@ export function scheduleNewPoint(
     strength: "normal",
     ease: DEFAULT_EASE,
     consecutivePasses: 0,
-    nextReviewAt: addDays(now, REVIEW_STAGE_DAYS[0]),
+    nextReviewAt: addHours(now, NEW_POINT_FIRST_REVIEW_HOURS),
     reviewHistory: [],
   };
 }
@@ -266,7 +269,7 @@ export function getDuePoints(points: KnowledgePoint[], now = new Date()): Knowle
 
 export function formatPointForPrompt(point: KnowledgePoint): string {
   const rel = point.relatedIds?.length ? `，关联${point.relatedIds.length}点` : "";
-  return `- [${point.id}] ${point.title}（${point.materialType}/${point.source}，阶段${point.stageIndex}，ease${point.ease.toFixed(1)}${point.strength === "weak" ? "，需加强" : ""}${rel}，下次：${point.nextReviewAt.slice(0, 10)}）`;
+  return `- [${point.id}] ${point.title}（阶段${point.stageIndex}，ease${point.ease.toFixed(1)}${point.strength === "weak" ? "，需加强" : ""}${rel}，下次：${formatReviewTime(point.nextReviewAt)}）`;
 }
 
 export function emptyLearningState(): UserLearningState {
@@ -278,7 +281,6 @@ export function emptyLearningState(): UserLearningState {
   };
 }
 
-/** 兼容旧版 { points, quiz } 结构 */
 export function migrateLearningState(raw: unknown): UserLearningState {
   if (!raw || typeof raw !== "object") return emptyLearningState();
 

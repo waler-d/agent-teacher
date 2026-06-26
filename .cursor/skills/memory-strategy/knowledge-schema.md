@@ -1,69 +1,32 @@
 # 知识点与复习调度数据结构
 
-## 存储分层（最大容量）
-
-| 层 | 内容 | 用途 |
-|----|------|------|
-| **active** | 完整 KnowledgePoint | 参与调度与出题 |
-| **archived** | 仅 id/title/cue/source/materialType/masteredAt | 已掌握，不占复习队列 |
-| **stats** | totalAdded / totalMastered | 统计 |
-
-活跃库建议上限 ~500；超出时优先复习、归档、去重。
-
-## KnowledgePoint（活跃）
-
-| 字段 | 约束 | 说明 |
-|------|------|------|
-| title | ≤24 字 | 去重键（normalize 后比较） |
-| summary | ≤120 字 | `线索→要点`，判题用 |
-| cue | ≤40 字 | 出题线索，不暴露 summary |
-| relatedIds | ≤5 个 id | 联想编码 + 交错复习 |
-| ease | 1.3～2.8 | 可塑因子，pass↑ fail↓ |
-| consecutivePasses | number | 连续 pass 次数 |
-| stageIndex | 0～7 | 复习阶段 |
-| strength | normal/weak | weak=曾不会 |
-
-## 间隔（最低遗忘）
+## 复习间隔（小时，最强频率）
 
 ```
-STAGES = [0, 1, 3, 7, 14, 30, 60, 120]  // 天
-interval = STAGES[stage] × (ease / 2.0)
+STAGES_HOURS = [1, 2, 4, 6, 12, 24, 36, 48]   // 最长 48h = 2 天
+interval = min(48, STAGES[stage] × (ease / 2.0))
 ```
 
-| 结果 | 行为 |
-|------|------|
-| pass | stage++，ease+0.08，按 interval 排 nextReviewAt |
-| partial | 不推进 stage，2 天后再考，ease-0.05 |
-| fail | stage 回退，ease-0.2，1 天后再考，weak |
+| 结果 | nextReviewAt |
+|------|----------------|
+| 新入库 | now + **1h** |
+| pass | now + interval（阶段递进，上限 48h） |
+| partial | now + **2h** |
+| fail / 不会 | now + **1h**，weak，阶段回退 |
 
-**归档条件**：stage ≥6 且 consecutivePasses ≥2 → 移入 archived。
+## 归档
 
-## 复习批次
+stage ≥6 且 consecutivePasses ≥2 → archived
 
-- 到期 ≥3 触发
-- 每批 ≤5 题，交错 materialType
-- 一次一题，cue 出题
-
-## knowledge_add 示例
+## PPT 字段示例
 
 ```json
 {
-  "title": "光合作用场所",
-  "cue": "叶绿体中主要反应？",
-  "summary": "光反应→类囊体；暗反应→基质",
+  "title": "光反应场所",
+  "cue": "类囊体上发生什么？",
+  "summary": "光反应→类囊体膜",
   "source": "ppt",
-  "sourceDetail": "生物.pptx p12",
-  "materialType": "concept",
-  "relatedIds": ["kp_xxx"]
-}
-```
-
-## Agent 状态块
-
-```json
-{
-  "knowledge_add": [],
-  "review_record": [{ "id": "kp_xxx", "result": "pass" }],
-  "quiz": { "action": "continue", "pointIds": [] }
+  "sourceDetail": "生物.pptx p3",
+  "materialType": "concept"
 }
 ```

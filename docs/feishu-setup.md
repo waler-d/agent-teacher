@@ -53,7 +53,9 @@
 | `im:message:send_as_bot` | 以机器人身份回复消息 |
 | `im:message.group_at_msg:readonly` | 群聊 @ 机器人时接收消息（群聊场景） |
 | `im:message.p2p_msg:readonly` | 接收私聊消息（可选，私聊场景） |
-| `im:resource` | 接收用户上传的 PPT/文件消息（可选） |
+| `im:resource` | 下载用户上传的 PPT 文件（**上传 PPT 入库必需**） |
+
+详见 [PPT 上传指南](./ppt-upload.md)。
 
 开通后点击 **发布版本**，让权限生效。
 

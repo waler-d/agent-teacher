@@ -24,7 +24,7 @@ type FeishuWebhookBody = {
 };
 
 async function handleIncomingMessage(event: Record<string, unknown>): Promise<void> {
-  const incoming = extractIncomingMessage(event);
+  const incoming = await extractIncomingMessage(event);
   if (!incoming) return;
 
   try {

@@ -90,6 +90,7 @@ export function buildLearningContext(state: UserLearningState, now = new Date())
   lines.push(`- 累计入库：${state.stats.totalAdded}，累计掌握：${state.stats.totalMastered}`);
   lines.push("");
   lines.push("入库规则：一条一点；summary 用「线索→要点」≤120字；关联 relatedIds；禁止重复 title。");
+  lines.push("复习调度：**以小时为单位**，最强频率；「不会」→ **1 小时**后再考；最长间隔 **48 小时（2 天）**。");
 
   lines.push("");
   lines.push(`## 到期应复习（${due.length} 个）— 优先处理`);
